@@ -200,94 +200,40 @@ pub fn current_user_token() -> usize {
     TASK_MANAGER.get_current_token()
 }
 
-use crate::config::PAGE_SIZE;
 
 ///unmao some vpn
 pub fn unmap_rangevpn(startaddr:VirtAddr,endaddr:VirtAddr){
-    let mut inner = TASK_MANAGER.inner.exclusive_access();
+   let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cu = inner.current_task;
-    let startvpn = VirtPageNum::from(startaddr);
-    let endvpn = VirtPageNum::from(endaddr);
-
-    //用于收集连续未映射的VPN范围
-    let mut current_range_start: Option<VirtPageNum> = None;
     
-    for vpn_value in (startvpn.0)..=(endvpn.0) {
-        let current_vpn = VirtPageNum(vpn_value);
-        
-        if inner.tasks[cu].memory_set.is_vpn_mapped(current_vpn) {
-            //如果当前VPN映射了，且没有正在收集的范围，则开始新范围
-            if current_range_start.is_none() {
-                current_range_start = Some(current_vpn);
-            }
-            //继续收集连续未映射的VPN
-        } else {
-            //遇到没映射的VPN，处理之前收集的连续映射范围
-            if let Some(range_start) = current_range_start.take() {
-                //取消映射从range_start到current_vpn前一个VPN的范围
-                let range_end = VirtPageNum(vpn_value - 1); // 前一个VPN
-                inner.tasks[cu].memory_set.unmap_range(
-                    VirtAddr::from(range_start), 
-                    VirtAddr(VirtAddr::from(range_end).0 + PAGE_SIZE), // 结束地址要包含整个页
-                );
-            }
-        }
-    }
-    
-    //处理最后一段连续未映射范围
-    if let Some(range_start) = current_range_start {
-        inner.tasks[cu].memory_set.unmap_range(
-            VirtAddr::from(range_start), 
-            VirtAddr(VirtAddr::from(endvpn).0 + PAGE_SIZE)
-        );
-    }
+    // 直接调用 memory_set 的 unmap_range 方法
+    inner.tasks[cu].memory_set.unmap_range(startaddr, endaddr);
 
 }
 
 ///map some vpn
 pub fn map_rangevpn(startaddr:VirtAddr,endaddr:VirtAddr,permis:MapPermission)->isize{
-  let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cu = inner.current_task;
-    let startvpn = VirtPageNum::from(startaddr);
-    let endvpn = VirtPageNum::from(endaddr);
-
-    //用于收集连续未映射的VPN范围
-    let mut current_range_start: Option<VirtPageNum> = None;
     
-    for vpn_value in (startvpn.0)..=(endvpn.0) {
-        let current_vpn = VirtPageNum(vpn_value);
-        
-        if !inner.tasks[cu].memory_set.is_vpn_mapped(current_vpn) {
-            //如果当前VPN未映射，且没有正在收集的范围，则开始新范围
-            if current_range_start.is_none() {
-                current_range_start = Some(current_vpn);
-            }
-            //继续收集连续未映射的VPN
-        } else {
-             //遇到已映射的VPN，处理之前收集的连续未映射范围
-            if let Some(range_start) = current_range_start.take() {
-                //映射从range_start到current_vpn前一个VPN的范围
-                let range_end = VirtPageNum(vpn_value - 1); // 前一个VPN
-                inner.tasks[cu].memory_set.insert_framed_area(
-                    VirtAddr::from(range_start), 
-                    VirtAddr(VirtAddr::from(range_end).0 + PAGE_SIZE), // 结束地址要包含整个页
-                    permis
-                );
-            }
-            return -1;
-           
+    // 检查整个范围是否都已未映射
+    let start_vpn = VirtPageNum::from(startaddr);
+    let end_vpn = VirtPageNum::from(endaddr);
+    
+    for vpn in start_vpn.0..=end_vpn.0 {
+        if inner.tasks[cu].memory_set.is_vpn_mapped(VirtPageNum(vpn)) {
+            return -1; // 范围内有已映射的页，直接返回错误
         }
     }
     
-    //处理最后一段连续未映射范围
-    if let Some(range_start) = current_range_start {
-        inner.tasks[cu].memory_set.insert_framed_area(
-            VirtAddr::from(range_start), 
-            VirtAddr(VirtAddr::from(endvpn).0 + PAGE_SIZE),
-            permis
-        );
-    }
-    return 0;
+    // 整个范围都未映射，直接创建映射
+    inner.tasks[cu].memory_set.insert_framed_area(
+        startaddr, 
+        endaddr, 
+        permis
+    );
+    
+    0
 
 }
 

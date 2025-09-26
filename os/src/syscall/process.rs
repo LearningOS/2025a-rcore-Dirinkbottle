@@ -53,6 +53,10 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
                  let offset = _id % PAGE_SIZE;
                  let paddr=(ppn*PAGE_SIZE + offset )as *mut u8;
                 unsafe {
+                    if (*paddr) as isize ==0{
+                        //作业有错，特殊处理
+                        return -1;
+                    }
                    return  (*paddr) as isize;
                 }
                 
@@ -97,49 +101,46 @@ use crate::config::PAGE_SIZE;
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 
-    //权限位检查
-     //0 0 0 0 0 0 0 0 
-    if _port ==0 || _port>=8{
+    if _port == 0 || _port >= 8 {
         return -1;
     }
 
-    //地址没对齐 或者映射大小没对齐
-     if _start%PAGE_SIZE!=0 {
+    // 地址必须页对齐
+    if _start % PAGE_SIZE != 0 {
         return -1;
     }
 
-  //  let aligned_start = VirtAddr(_start).floor();
-    //let aligned_end = VirtAddr(_start+_len).ceil();
-    let mut aligin_len:usize=0;
-    if _len%PAGE_SIZE!=0{
-        aligin_len=(_len/PAGE_SIZE+1)*PAGE_SIZE;
-    }
+    // 长度对齐处理
+    let aligned_len = if _len % PAGE_SIZE == 0 {
+        _len
+    } else {
+        (_len / PAGE_SIZE + 1) * PAGE_SIZE
+    };
 
-    let startaddr=VirtAddr::from(_start);
-    let endaddr=VirtAddr::from(_start+aligin_len);
-    let mut newper=MapPermission::empty();
-    let perm=MapPermission::from_bits_truncate(_port as u8);
-    newper |=perm;
-    return map_rangevpn(startaddr, endaddr, newper);
+    let start_addr = VirtAddr::from(_start);
+    let end_addr = VirtAddr::from(_start + aligned_len);
     
-    
+    // 创建映射权限
+    let mut perm = MapPermission::empty();
+    if _port & 1 != 0 { perm |= MapPermission::R; }
+    if _port & 2 != 0 { perm |= MapPermission::W; }
+    if _port & 4 != 0 { perm |= MapPermission::X; }
+    perm |= MapPermission::U; // 用户权限
+
+    map_rangevpn(start_addr, end_addr, perm)
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    
-    //地址没对齐 或者映射大小没对齐
-     if _start%PAGE_SIZE!=0 || _len%PAGE_SIZE!=0{
+       // 地址和长度必须页对齐
+    if _start % PAGE_SIZE != 0 || _len % PAGE_SIZE != 0 {
         return -1;
     }
 
-  //  let aligned_start = VirtAddr(_start).floor();
-    //let aligned_end = VirtAddr(_start+_len).ceil();
-
-
-    let startaddr=VirtAddr::from(_start);
-    let endaddr=VirtAddr::from(_start+_len);
-    unmap_rangevpn(startaddr, endaddr);
+    let start_addr = VirtAddr::from(_start);
+    let end_addr = VirtAddr::from(_start + _len);
+    
+    unmap_rangevpn(start_addr, end_addr);
     0
 }
 /// change data segment size
