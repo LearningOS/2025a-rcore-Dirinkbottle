@@ -67,6 +67,7 @@ fn clear_bss() {
 pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
+    println!(".");
     logging::init();
     mm::init();
     mm::remap_test();
