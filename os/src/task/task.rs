@@ -28,6 +28,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+
+
 }
 
 impl TaskControlBlock {
@@ -95,6 +98,14 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+///add_syscall_id
+    pub fn add_syscall_id(&mut self,id:usize){
+        self.task_cx.syscallid[id]+=1;
+    }
+///get_syscall_id
+    pub fn get_syscall_id(&mut self,id:usize)->usize{
+        self.task_cx.syscallid[id]
     }
 }
 

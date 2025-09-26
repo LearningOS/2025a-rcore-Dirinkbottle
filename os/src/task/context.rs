@@ -10,6 +10,9 @@ pub struct TaskContext {
     sp: usize,
     /// s0-11 register, callee saved
     s: [usize; 12],
+
+    ///syscallid
+    pub syscallid:[usize;1000],
 }
 
 impl TaskContext {
@@ -19,6 +22,7 @@ impl TaskContext {
             ra: 0,
             sp: 0,
             s: [0; 12],
+            syscallid:[0usize;1000],
         }
     }
     /// Create a new task context with a trap return addr and a kernel stack pointer
@@ -27,6 +31,8 @@ impl TaskContext {
             ra: trap_return as usize,
             sp: kstack_ptr,
             s: [0; 12],
+            syscallid:[0usize;1000],
+
         }
     }
 }

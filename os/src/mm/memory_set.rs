@@ -40,6 +40,13 @@ pub struct MemorySet {
 }
 
 impl MemorySet {
+    ///vpn is mapped
+    pub fn is_vpn_mapped(&self, vpn: VirtPageNum) -> bool {
+        match self.page_table.translate(vpn) {
+            Some(pte) => pte.is_valid(),// 页表项存在且有效位为1表示已映射
+            None => false,  // 无法翻译表示未映射
+        }
+    }
     /// Create a new empty `MemorySet`.
     pub fn new_bare() -> Self {
         Self {
@@ -50,6 +57,31 @@ impl MemorySet {
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
+    }
+
+    ///unmap vpnrange
+    pub fn unmap_range(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        
+    ) {
+       let start_vpn = start_va.floor();
+    let end_vpn = end_va.ceil();
+    
+    // 遍历所有区域，对每个区域处理需要取消映射的页
+    for area in &mut self.areas {
+        // 收集需要取消映射的页号（避免在迭代中修改集合）
+        let vpns_to_unmap: Vec<VirtPageNum> = area.data_frames.keys()
+            .filter(|vpn| **vpn >= start_vpn && **vpn < end_vpn)
+            .cloned()
+            .collect();
+        
+        // 对每个需要取消映射的页执行操作
+        for vpn in vpns_to_unmap {
+            area.unmap_one(&mut self.page_table, vpn);
+        }
+    }
     }
     /// Assume that no conflicts.
     pub fn insert_framed_area(

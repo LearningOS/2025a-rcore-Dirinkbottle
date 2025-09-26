@@ -15,6 +15,7 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -71,6 +72,10 @@ lazy_static! {
 }
 
 impl TaskManager {
+
+
+
+
     /// Run the first task in task list.
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
@@ -153,6 +158,8 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+
 }
 
 /// Run the first task in task list.
@@ -191,6 +198,116 @@ pub fn exit_current_and_run_next() {
 /// Get the current 'Running' task's token.
 pub fn current_user_token() -> usize {
     TASK_MANAGER.get_current_token()
+}
+
+use crate::config::PAGE_SIZE;
+
+///unmao some vpn
+pub fn unmap_rangevpn(startaddr:VirtAddr,endaddr:VirtAddr){
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let cu = inner.current_task;
+    let startvpn = VirtPageNum::from(startaddr);
+    let endvpn = VirtPageNum::from(endaddr);
+
+    //用于收集连续未映射的VPN范围
+    let mut current_range_start: Option<VirtPageNum> = None;
+    
+    for vpn_value in (startvpn.0)..=(endvpn.0) {
+        let current_vpn = VirtPageNum(vpn_value);
+        
+        if inner.tasks[cu].memory_set.is_vpn_mapped(current_vpn) {
+            //如果当前VPN映射了，且没有正在收集的范围，则开始新范围
+            if current_range_start.is_none() {
+                current_range_start = Some(current_vpn);
+            }
+            //继续收集连续未映射的VPN
+        } else {
+            //遇到没映射的VPN，处理之前收集的连续映射范围
+            if let Some(range_start) = current_range_start.take() {
+                //取消映射从range_start到current_vpn前一个VPN的范围
+                let range_end = VirtPageNum(vpn_value - 1); // 前一个VPN
+                inner.tasks[cu].memory_set.unmap_range(
+                    VirtAddr::from(range_start), 
+                    VirtAddr(VirtAddr::from(range_end).0 + PAGE_SIZE), // 结束地址要包含整个页
+                );
+            }
+        }
+    }
+    
+    //处理最后一段连续未映射范围
+    if let Some(range_start) = current_range_start {
+        inner.tasks[cu].memory_set.unmap_range(
+            VirtAddr::from(range_start), 
+            VirtAddr(VirtAddr::from(endvpn).0 + PAGE_SIZE)
+        );
+    }
+
+}
+
+///map some vpn
+pub fn map_rangevpn(startaddr:VirtAddr,endaddr:VirtAddr,permis:MapPermission)->isize{
+  let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let cu = inner.current_task;
+    let startvpn = VirtPageNum::from(startaddr);
+    let endvpn = VirtPageNum::from(endaddr);
+
+    //用于收集连续未映射的VPN范围
+    let mut current_range_start: Option<VirtPageNum> = None;
+    
+    for vpn_value in (startvpn.0)..=(endvpn.0) {
+        let current_vpn = VirtPageNum(vpn_value);
+        
+        if !inner.tasks[cu].memory_set.is_vpn_mapped(current_vpn) {
+            //如果当前VPN未映射，且没有正在收集的范围，则开始新范围
+            if current_range_start.is_none() {
+                current_range_start = Some(current_vpn);
+            }
+            //继续收集连续未映射的VPN
+        } else {
+             //遇到已映射的VPN，处理之前收集的连续未映射范围
+            if let Some(range_start) = current_range_start.take() {
+                //映射从range_start到current_vpn前一个VPN的范围
+                let range_end = VirtPageNum(vpn_value - 1); // 前一个VPN
+                inner.tasks[cu].memory_set.insert_framed_area(
+                    VirtAddr::from(range_start), 
+                    VirtAddr(VirtAddr::from(range_end).0 + PAGE_SIZE), // 结束地址要包含整个页
+                    permis
+                );
+            }
+            return -1;
+           
+        }
+    }
+    
+    //处理最后一段连续未映射范围
+    if let Some(range_start) = current_range_start {
+        inner.tasks[cu].memory_set.insert_framed_area(
+            VirtAddr::from(range_start), 
+            VirtAddr(VirtAddr::from(endvpn).0 + PAGE_SIZE),
+            permis
+        );
+    }
+    return 0;
+
+}
+
+///get syscall
+pub fn getsyscalls_id(id:usize)->usize{
+
+    let mut inner=TASK_MANAGER.inner.exclusive_access();
+    let cu=inner.current_task;
+    inner.tasks[cu].get_syscall_id(id)
+}
+
+
+///add syscall
+pub fn add_syscalls_id(id:usize){
+    if id > 1000{
+        return;
+    }
+    let mut inner=TASK_MANAGER.inner.exclusive_access();
+    let cu=inner.current_task;
+    inner.tasks[cu].add_syscall_id(id);
 }
 
 /// Get the current 'Running' task's trap contexts.
