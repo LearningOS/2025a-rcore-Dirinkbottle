@@ -1,6 +1,8 @@
 //! Process management syscalls
+use core::{ptr::null};
+
 use crate::{
-    task::{exit_current_and_run_next, suspend_current_and_run_next},
+    task::{exit_current_and_run_next, suspend_current_and_run_next,get_syscallss_id},
     timer::get_time_us,
 };
 
@@ -26,20 +28,50 @@ pub fn sys_yield() -> isize {
 }
 
 /// get time with second and microsecond
-pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-    let us = get_time_us();
+pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     unsafe {
-        *ts = TimeVal {
-            sec: us / 1_000_000,
-            usec: us % 1_000_000,
+        *_ts = TimeVal {
+            sec: get_time_us() / 1_000_000,
+            usec: get_time_us() % 1_000_000,
         };
     }
     0
 }
 
+
 // TODO: implement the syscall
 pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
-    trace!("kernel: sys_trace");
-    -1
+    match _trace_request{
+        0=>{
+            if _id as *const u8 == null() || _id ==0 {
+                return -1;
+            }
+
+            let ptr = _id as *const u8;
+            unsafe {
+                *ptr  as isize
+            }
+            
+
+
+
+        }
+        1=>{
+            if _id as *const u8 == null() || _id ==0 {
+                return -1;
+            }
+            let  ptr = _id as *mut u8;
+            unsafe {
+                *ptr=_data as u8;
+            }
+            0
+
+        }
+        2=>{
+            get_syscallss_id(_id) as isize
+        }
+        _=>{
+            -1
+        }
+    }
 }

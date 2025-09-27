@@ -1,3 +1,4 @@
+
 //! Task management implementation
 //!
 //! Everything about task management, like starting and switching tasks is
@@ -17,6 +18,7 @@ mod task;
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::syscall::SYSCALLID_MAX;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -72,6 +74,25 @@ lazy_static! {
 }
 
 impl TaskManager {
+
+    ///get syscallid
+    fn get_syscalls_id(&self,id:usize)->usize{
+        if id >SYSCALLID_MAX {
+            return 0;
+        }
+    let inner=self.inner.exclusive_access();
+    let currenttask=inner.current_task;
+    inner.tasks[currenttask].task_cx.syscallid[id]
+    }
+
+    /// add syscallid
+    fn add_syscalls_id(&self,id:usize){
+        
+        let mut inner=self.inner.exclusive_access();
+        let currenttask=inner.current_task;
+        inner.tasks[currenttask].task_cx.syscallid[id]+=1;
+    }
+
     /// Run the first task in task list.
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
@@ -135,6 +156,16 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+}
+
+
+///get syscall id 
+pub fn get_syscallss_id(id:usize)->usize{
+    TASK_MANAGER.get_syscalls_id(id)
+}
+/// add syscall id
+pub fn add_syscallss_id(id:usize){
+    TASK_MANAGER.add_syscalls_id(id);
 }
 
 /// Run the first task in task list.

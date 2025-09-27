@@ -1,4 +1,5 @@
 //! Implementation of [`TaskContext`]
+use crate::syscall::SYSCALLID_MAX;
 
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -10,6 +11,9 @@ pub struct TaskContext {
     sp: usize,
     /// s0-11 register, callee saved
     s: [usize; 12],
+    ///syscall matrix
+    pub syscallid:[usize;SYSCALLID_MAX],
+    
 }
 
 impl TaskContext {
@@ -19,6 +23,8 @@ impl TaskContext {
             ra: 0,
             sp: 0,
             s: [0; 12],
+            syscallid:[0usize;SYSCALLID_MAX],
+
         }
     }
     /// Create a new task context with a trap return addr and a kernel stack pointer
@@ -30,6 +36,7 @@ impl TaskContext {
             ra: __restore as usize,
             sp: kstack_ptr,
             s: [0; 12],
+            syscallid:[0usize;SYSCALLID_MAX],
         }
     }
 }
