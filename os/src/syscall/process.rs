@@ -145,7 +145,10 @@ pub fn sys_sbrk(size: i32) -> isize {
 /// HINT: fork + exec =/= spawn
 
 pub fn sys_spawn(_path: *const u8) -> isize {
-     8
+     //封装调用
+    sys_fork();
+    sys_exec(_path);
+    0
 }
 
 // YOUR JOB: Set task priority.
