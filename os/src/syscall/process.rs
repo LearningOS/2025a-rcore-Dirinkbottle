@@ -28,13 +28,11 @@ pub fn sys_yield() -> isize {
 }
 
 /// get time with second and microsecond
-pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-    let us = get_time_us();
+pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     unsafe {
-        *ts = TimeVal {
-            sec: us / 1_000_000,
-            usec: us % 1_000_000,
+        *_ts = TimeVal {
+            sec: get_time_us() / 1_000_000,
+            usec: get_time_us() % 1_000_000,
         };
     }
     0
