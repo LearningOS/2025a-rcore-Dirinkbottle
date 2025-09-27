@@ -90,23 +90,6 @@ impl TaskManager {
         panic!("unreachable in run_first_task!");
     }
 
-    ///get syscallid func
-    fn get_syscall(&self,syscallid:usize)->usize{
-      let currentask=  self.inner.exclusive_access().current_task;
-      let  contexts= self.inner.exclusive_access().tasks[currentask].task_cx;
-      contexts.syscallr[syscallid]
-    }
-    
-
-    ///add syscallid func
-    fn add_syscall(&self,syscallid:usize){
-      let currentask=  self.inner.exclusive_access().current_task;
-      let mut  contexts= self.inner.exclusive_access().tasks[currentask].task_cx;
-      contexts.syscallr[syscallid]+=1;
-    }
-
-
-
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
@@ -153,19 +136,6 @@ impl TaskManager {
         }
     }
 }
-
-
-///get syscall id
-pub fn get_syscall_id(callid:usize)->usize{
-    TASK_MANAGER.get_syscall(callid)
-}
-
-
-///add syscall id
-pub fn add_syscall_id(callid:usize){
-    TASK_MANAGER.add_syscall(callid);
-}
-
 
 /// Run the first task in task list.
 pub fn run_first_task() {
