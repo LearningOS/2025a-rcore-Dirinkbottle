@@ -29,6 +29,56 @@ impl Inode {
             block_device,
         }
     }
+
+    /// Create a hard link from oldpath to newpath
+    pub fn hard_link(&self, oldpath: &str, newpath: &str) -> Result<i32, i32> {
+        let mut fs = self.fs.lock();
+        
+        // 1. 查找原文件（oldpath）的inode_id
+        let old_inode_id = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(oldpath, disk_inode)
+        }).ok_or(-1)?; // 文件不存在返回错误[1](@ref)
+
+        // 2. 检查新路径（newpath）是否已存在
+        let newpath_exists = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(newpath, disk_inode).is_some()
+        });
+        
+        if newpath_exists {
+            return Err(-1); // 新路径已存在，返回错误
+        }
+
+        // 3. 在当前目录中添加新的目录项指向原文件的inode[1](@ref)
+        self.modify_disk_inode(|root_inode| {
+            // 确保当前inode是目录
+            assert!(root_inode.is_dir());
+            
+            // 计算新的目录大小
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            
+            // 扩展目录大小[1](@ref)
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            
+            // 创建新的目录项，指向原文件的inode_id[1](@ref)
+            let dirent = DirEntry::new(newpath, old_inode_id);
+            
+            // 将新目录项写入目录末尾
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+
+        // 4. 同步块缓存
+        block_cache_sync_all();
+        
+        Ok(0)
+    }
+
+
+
     /// Call a function over a disk inode to read it
     fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
         get_block_cache(self.block_id, Arc::clone(&self.block_device))
