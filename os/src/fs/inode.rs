@@ -56,6 +56,7 @@ impl OSInode {
 }
 
 lazy_static! {
+    ///rootnode
     pub static ref ROOT_INODE: Arc<Inode> = {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
         Arc::new(EasyFileSystem::root_inode(&efs))
@@ -100,6 +101,15 @@ impl OpenFlags {
         }
     }
 }
+
+/// Create a hard link from oldpath to newpath
+/// 在指定目录项创建一个指向oldpath的inode的条目实现硬链接
+pub fn file_hard_link( oldpath: &str, newpath: &str) -> Result<i32, i32> {
+
+    ROOT_INODE.hard_link(oldpath, newpath)
+
+}
+
 
 /// Open a file
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {

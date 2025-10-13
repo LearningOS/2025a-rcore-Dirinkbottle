@@ -101,16 +101,17 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     }
     // ---- release current PCB automatically
 }
-
+use crate::mm::translated_byte_buffer;
+use crate::timer::get_time_us;
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+   let ptr= translated_byte_buffer(current_user_token(), _ts as *const u8, 16).pop().unwrap().as_mut_ptr() as *mut TimeVal ;
+    unsafe {
+        *ptr=TimeVal { sec: get_time_us()/1_000_000, usec: get_time_us()%1_000_000 }
+    }
+    0
 }
 
 /// YOUR JOB: Implement mmap.
