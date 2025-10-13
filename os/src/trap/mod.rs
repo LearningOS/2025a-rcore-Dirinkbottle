@@ -52,7 +52,7 @@ pub fn enable_timer_interrupt() {
         sie::set_stimer();
     }
 }
-
+use crate::task::current_task;
 /// trap handler
 #[no_mangle]
 pub fn trap_handler() -> ! {
@@ -92,9 +92,22 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            set_next_trigger();
-            suspend_current_and_run_next();
+  set_next_trigger();
+    
+    if let Some(current) = current_task() {
+        let mut inner = current.inner_exclusive_access();
+        if inner.time_slice > 0 {
+            inner.time_slice -= 1;
         }
+        // 时间片用完或任务主动放弃CPU
+        if inner.time_slice == 0 || inner.need_resched {
+            drop(inner);
+            suspend_current_and_run_next();
+        } else {
+            drop(inner);
+        }
+    }
+    }
         _ => {
             panic!(
                 "Unsupported trap {:?}, stval = {:#x}!",

@@ -5,7 +5,7 @@ use crate::{
     loader::get_app_data_by_name,
     mm::{translated_refmut, translated_str},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
+       add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
     },
 };
@@ -143,15 +143,54 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-
 pub fn sys_spawn(_path: *const u8) -> isize {
-     //封装调用
-    sys_fork();
-    sys_exec(_path);
-    0
+    trace!("kernel:pid[{}] sys_spawn", current_task().unwrap().pid.0);
+    let current_tasks = current_task().unwrap();
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    let _app_data = if let Some(data) = get_app_data_by_name(path.as_str()) {
+        data
+    } else {
+        return -1;  // 程序不存在，直接返回错误
+    };
+
+    let new_task = current_tasks.fork();
+    let new_pid = new_task.pid.0;
+    new_task.exec(_app_data);
+    // modify trap context of new_task, because it returns immediately after switching
+    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    // we do not have to move to next instruction since we have done it before
+    // for child process, fork returns 0
+    trap_cx.x[10] = 0;
+    // add new task to scheduler
+    add_task(new_task);
+    new_pid as isize
+
+
 }
 
 // YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
- 0
+
+    if _prio<2{
+        return -1;//输入必须合法
+    }
+
+
+    trace!(
+        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        current_task().unwrap().pid.0
+    );
+    
+    let current_tasks = current_task().unwrap();
+    let mut inner=current_tasks.inner_exclusive_access();
+    inner.ticket=_prio as usize;
+    if inner.ticket == _prio as usize{
+        drop(inner);
+        return _prio;
+    }else{
+        drop(inner);
+        return -1;
+    }
+    
 }

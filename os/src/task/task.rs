@@ -9,6 +9,10 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
 
+
+///GLOBAL BIGCONST
+pub const BIGCONST:usize=100;
+
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
@@ -35,7 +39,6 @@ impl TaskControlBlock {
         inner.memory_set.token()
     }
 }
-
 pub struct TaskControlBlockInner {
     /// The physical page number of the frame where the trap context is placed
     pub trap_cx_ppn: PhysPageNum,
@@ -68,6 +71,20 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+     ///stride content
+    ///ticket
+    pub ticket:usize,
+
+    ///stride
+    pub stride:usize,
+
+    ///pass
+    pub pass:usize,
+    // 剩余时间片
+    pub time_slice: usize,   
+    //是否需要重新调度
+    pub need_resched:bool,
 }
 
 impl TaskControlBlockInner {
@@ -118,8 +135,16 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    ticket:16,
+            stride:BIGCONST/16,
+            pass:0,
+            time_slice:0,
+            need_resched:false,
+
                 })
             },
+            
+
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -191,8 +216,15 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                     pass:0,
+                     ticket:16,
+                     stride:BIGCONST/16,
+                     time_slice:0,
+                     need_resched:false,
+
                 })
             },
+           
         });
         // add child
         parent_inner.children.push(task_control_block.clone());
@@ -240,6 +272,8 @@ impl TaskControlBlock {
 
 #[derive(Copy, Clone, PartialEq)]
 /// task status: UnInit, Ready, Running, Exited
+#[derive(Debug)]
+/// 
 pub enum TaskStatus {
     /// uninitialized
     UnInit,

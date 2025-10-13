@@ -1,5 +1,6 @@
 //! Implementation of [`TaskContext`]
 use crate::trap::trap_return;
+#[derive(Debug)]
 
 #[repr(C)]
 /// task context structure containing some registers

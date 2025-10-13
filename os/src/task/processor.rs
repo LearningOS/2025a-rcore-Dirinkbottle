@@ -8,6 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
+use crate::task::manager::TASK_MANAGER;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -45,17 +46,23 @@ impl Processor {
         self.current.as_ref().map(Arc::clone)
     }
 }
-
+use crate::task::add_task;
 lazy_static! {
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
-
 ///The main part of process execution and scheduling
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
         if let Some(task) = fetch_task() {
+
+              // 重置时间片和调度标志
+            {
+                let mut inner = task.inner_exclusive_access();
+                inner.time_slice = TASK_MANAGER.exclusive_access().time_slice;
+                inner.need_resched = false;
+            }
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
@@ -70,6 +77,24 @@ pub fn run_tasks() {
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
+            
+
+
+        let  processors = PROCESSOR.exclusive_access();
+            // 任务切换回来后检查是否需要重新调度
+            let task = processors.current();
+            match task{
+                None=>{},
+                Some(ta)=>{
+                    if ta.inner_exclusive_access().need_resched {
+                         add_task(ta);
+                    }
+                }
+            }
+            
+            
+
+
         } else {
             warn!("no tasks available in run_tasks");
         }
