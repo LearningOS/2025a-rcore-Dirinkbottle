@@ -11,7 +11,7 @@ use core::cell::RefMut;
 
 
 ///GLOBAL BIGCONST
-pub const BIGCONST:usize=100;
+pub const BIGCONST:usize=10_000_000;
 
 /// Task control block structure
 ///
@@ -85,6 +85,8 @@ pub struct TaskControlBlockInner {
     pub time_slice: usize,   
     //是否需要重新调度
     pub need_resched:bool,
+    //已经使用的时间片
+    pub used_time:usize,
 }
 
 impl TaskControlBlockInner {
@@ -140,6 +142,8 @@ impl TaskControlBlock {
             pass:0,
             time_slice:0,
             need_resched:false,
+            used_time:0,
+
 
                 })
             },
@@ -221,6 +225,8 @@ impl TaskControlBlock {
                      stride:BIGCONST/16,
                      time_slice:0,
                      need_resched:false,
+                     used_time:0,
+
 
                 })
             },

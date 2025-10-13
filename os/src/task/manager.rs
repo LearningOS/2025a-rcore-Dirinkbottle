@@ -1,4 +1,6 @@
 //!Implementation of [`TaskManager`]
+use core::usize;
+
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
@@ -9,6 +11,8 @@ pub struct TaskManager {
     /// 时间片长度
     pub time_slice: usize,
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    ///步长最大限制
+    pub pass_max:usize
 }
 use crate::task::task::BIGCONST;
 use crate::task::TaskStatus;
@@ -17,8 +21,9 @@ impl TaskManager {
     ///Creat an empty TaskManager
     pub fn new() -> Self {
         Self {
-            time_slice:5,
+            time_slice:10,
             ready_queue: VecDeque::new(),
+            pass_max:usize::MAX/2,
         }
     }
     /// Add process back to ready queue
@@ -51,18 +56,9 @@ impl TaskManager {
             println!("[Scheduler] Queue is empty");
             return None;
         }
-  println!("[Scheduler] Queue size: {}", self.ready_queue.len());
         // 找到最小通行值的任务索引
         let mut min_index = 0;
         let mut min_pass = usize::MAX;
-          
-    // 打印所有任务状态
-    for (_i, task) in self.ready_queue.iter().enumerate() {
-        let inner = task.inner_exclusive_access();
-        println!("  Task {}: status={:?}, ticket={}, pass={}", 
-                 task.getpid(), inner.task_status, inner.ticket, inner.pass);
-        drop(inner);
-    }
         for (i, task) in self.ready_queue.iter().enumerate() {
             let inner = task.inner_exclusive_access();
             if inner.pass < min_pass {
@@ -71,13 +67,17 @@ impl TaskManager {
             }
             drop(inner);
         }
-
         // 移除并返回最小通行值的任务
         let task = self.ready_queue.remove(min_index).unwrap();
         
         // 更新被选中任务的通行值
         let mut inner = task.inner_exclusive_access();
-        inner.pass = inner.pass.wrapping_add(inner.stride);
+        if inner.pass>=self.pass_max{
+            inner.pass=0;
+        }else{
+         inner.pass = inner.pass.wrapping_add(inner.stride);
+
+        }
         drop(inner);
            println!("[Scheduler] Selected task {} with pass {}", 
              task.getpid(), min_pass);

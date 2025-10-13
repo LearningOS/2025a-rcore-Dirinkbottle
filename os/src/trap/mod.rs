@@ -97,7 +97,8 @@ pub fn trap_handler() -> ! {
     if let Some(current) = current_task() {
         let mut inner = current.inner_exclusive_access();
         if inner.time_slice > 0 {
-            inner.time_slice -= 1;
+            inner.used_time+=1;//增加一次记录
+            inner.time_slice -= 1;//减少1次
         }
         // 时间片用完或任务主动放弃CPU
         if inner.time_slice == 0 || inner.need_resched {
