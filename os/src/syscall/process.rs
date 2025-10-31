@@ -26,7 +26,7 @@ pub fn sys_yield() -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 
-use crate::mm::{ MapPermission, PageTable, VirtAddr,  translated_byte_buffer};
+use crate::mm::{ MapPermission, PageTable, PTEFlags, VirtAddr,  translated_byte_buffer};
 use crate::timer::get_time_us;
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
    let ptr= translated_byte_buffer(current_user_token(), _ts as *const u8, 16).pop().unwrap().as_mut_ptr() as *mut TimeVal ;
@@ -39,7 +39,6 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// TODO: Finish sys_trace to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
-
     match _trace_request{
         0=>{
            let table= PageTable::from_token(current_user_token());
@@ -48,15 +47,11 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
                return  -1;
             }
             Some(_value)=>{
-             if _value.is_valid() && _value.readable(){
+             if _value.is_valid() && _value.readable() && (_value.flags() & PTEFlags::U) != PTEFlags::empty(){
                  let ppn=_value.ppn().0;
                  let offset = _id % PAGE_SIZE;
                  let paddr=(ppn*PAGE_SIZE + offset )as *mut u8;
                 unsafe {
-                    if (*paddr) as isize ==0{
-                        //作业有错，特殊处理
-                        return -1;
-                    }
                    return  (*paddr) as isize;
                 }
                 
@@ -67,7 +62,7 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
            }
         }
         1=>{
-            let table= PageTable::from_token(current_user_token());
+        let table= PageTable::from_token(current_user_token());
            match table.translate(VirtAddr(_id).floor()){
             None=>{
                return  -1;
@@ -75,9 +70,10 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
             Some(_value)=>{
                if !_value.writable(){return -1;}
                if !_value.is_valid(){return -1;}
+               if (_value.flags() & PTEFlags::U) == PTEFlags::empty(){return -1;} //添加用户权限检查 0x7ffffff的地址截断导致访问到内核区域!
                 let ppn=_value.ppn().0;
-                 let offset = _id % PAGE_SIZE;
-                 let paddr=(ppn*PAGE_SIZE + offset )as *mut u8;
+                let offset = _id % PAGE_SIZE;
+                let paddr=(ppn*PAGE_SIZE + offset )as *mut u8;
                 unsafe {
                     *paddr =_data as u8;
                     return 0;

@@ -220,7 +220,7 @@ pub fn map_rangevpn(startaddr:VirtAddr,endaddr:VirtAddr,permis:MapPermission)->i
     let start_vpn = VirtPageNum::from(startaddr);
     let end_vpn = VirtPageNum::from(endaddr);
     
-    for vpn in start_vpn.0..=end_vpn.0 {
+    for vpn in start_vpn.0..end_vpn.0 {//应该为左闭右开
         if inner.tasks[cu].memory_set.is_vpn_mapped(VirtPageNum(vpn)) {
             return -1; // 范围内有已映射的页，直接返回错误
         }
