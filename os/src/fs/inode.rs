@@ -102,13 +102,6 @@ impl OpenFlags {
     }
 }
 
-/// Create a hard link from oldpath to newpath
-/// 在指定目录项创建一个指向oldpath的inode的条目实现硬链接
-pub fn file_hard_link( oldpath: &str, newpath: &str) -> Result<i32, i32> {
-
-    ROOT_INODE.hard_link(oldpath, newpath)
-
-}
 
 
 /// Open a file
@@ -166,4 +159,21 @@ impl File for OSInode {
         }
         total_write_size
     }
+    
+}
+
+
+///link file
+pub fn link_file(old_name: &str, new_name: &str) -> Option<()> {
+    // Find the old file
+    let old_inode = ROOT_INODE.find(old_name)?;
+    // Get its inode id
+    let inode_id = old_inode.get_current_inode_id();
+    // Create link in root directory
+    ROOT_INODE.link(new_name, inode_id)
+}
+
+///unlink file
+pub fn unlink_file(name: &str) -> Option<()> {
+    ROOT_INODE.unlink(name)
 }

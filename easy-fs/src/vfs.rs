@@ -6,15 +6,108 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
+use crate::BLOCK_SZ;
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
     block_id: usize,
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
+    hlink:usize,
 }
 
 impl Inode {
+
+    ///HardLink
+    pub fn link(&self,name:&str,inode_id:u32)->Option<()>{
+        
+        let mut fs = self.fs.lock();//get lock
+        //自己是不是文件夹
+        if !self.read_disk_inode(|dnode|{dnode.is_dir()}){
+            return None;
+        }
+        //是否有重名链接
+        if self.read_disk_inode(|dnode|{
+            self.find_inode_id(name, dnode).is_some()
+        }){
+            return None;
+        }
+        //添加目录项
+        self.modify_disk_inode(|root_node|{
+            let dir_count =(root_node.size as usize)/DIRENT_SZ;
+            let new_size = (dir_count+1)*DIRENT_SZ;
+            self.increase_size(new_size as u32, root_node, &mut fs);
+            let new_direntry = DirEntry::new(name, inode_id);
+            root_node.write_at(dir_count*DIRENT_SZ, new_direntry.as_bytes(), &self.block_device);
+        });
+        //立即刷新块缓存
+        block_cache_sync_all();
+        Some(())
+
+    }
+
+    ///unlink
+    pub fn unlink(&self, name: &str) -> Option<()> {
+        let mut fs = self.fs.lock();
+        
+        //是否是目录
+        if !self.read_disk_inode(|disk_inode| disk_inode.is_dir()) {
+            return None;
+        }
+        
+        //find entry
+        let target_inode_id = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(name, disk_inode)
+        })?;
+        
+        //reove dir entry
+        self.modify_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut target_index = None;
+            let mut dirent = DirEntry::empty();
+            
+            // Find target entry index
+            for i in 0..file_count {
+                disk_inode.read_at(
+                    DIRENT_SZ * i,
+                    dirent.as_bytes_mut(),
+                    &self.block_device,
+                );
+                if dirent.inode_id() == target_inode_id {
+                    target_index = Some(i);
+                    break;
+                }
+            }
+            
+            if let Some(idx) = target_index {
+                for i in idx..(file_count - 1) {
+                    disk_inode.read_at(
+                        DIRENT_SZ * (i + 1),
+                        dirent.as_bytes_mut(),
+                        &self.block_device,
+                    );
+                    disk_inode.write_at(
+                        DIRENT_SZ * i,
+                        dirent.as_bytes(),
+                        &self.block_device,
+                    );
+                }
+                //减少大小
+                disk_inode.size -= DIRENT_SZ as u32;
+            }
+        });
+        
+        block_cache_sync_all();
+        Some(())
+    }
+
+    ///get current inode id
+    pub fn get_current_inode_id(&self)->u32{
+        self.fs.lock().get_inode_id_from_pos(self.block_id as u32, self.block_offset)
+    } 
+
+
+
     /// Create a vfs inode
     pub fn new(
         block_id: u32,
@@ -27,54 +120,8 @@ impl Inode {
             block_offset,
             fs,
             block_device,
+            hlink:0,
         }
-    }
-
-    /// Create a hard link from oldpath to newpath
-    pub fn hard_link(&self, oldpath: &str, newpath: &str) -> Result<i32, i32> {
-        let mut fs = self.fs.lock();
-        
-        // 1. 查找原文件（oldpath）的inode_id
-        let old_inode_id = self.read_disk_inode(|disk_inode| {
-            self.find_inode_id(oldpath, disk_inode)
-        }).ok_or(-1)?; // 文件不存在返回错误[1](@ref)
-
-        // 2. 检查新路径（newpath）是否已存在
-        let newpath_exists = self.read_disk_inode(|disk_inode| {
-            self.find_inode_id(newpath, disk_inode).is_some()
-        });
-        
-        if newpath_exists {
-            return Err(-1); // 新路径已存在，返回错误
-        }
-
-        // 3. 在当前目录中添加新的目录项指向原文件的inode[1](@ref)
-        self.modify_disk_inode(|root_inode| {
-            // 确保当前inode是目录
-            assert!(root_inode.is_dir());
-            
-            // 计算新的目录大小
-            let file_count = (root_inode.size as usize) / DIRENT_SZ;
-            let new_size = (file_count + 1) * DIRENT_SZ;
-            
-            // 扩展目录大小[1](@ref)
-            self.increase_size(new_size as u32, root_inode, &mut fs);
-            
-            // 创建新的目录项，指向原文件的inode_id[1](@ref)
-            let dirent = DirEntry::new(newpath, old_inode_id);
-            
-            // 将新目录项写入目录末尾
-            root_inode.write_at(
-                file_count * DIRENT_SZ,
-                dirent.as_bytes(),
-                &self.block_device,
-            );
-        });
-
-        // 4. 同步块缓存
-        block_cache_sync_all();
-        
-        Ok(0)
     }
 
 

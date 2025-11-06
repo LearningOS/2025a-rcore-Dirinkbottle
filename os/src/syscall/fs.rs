@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat,file_hard_link};
+use crate::fs::*;
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -85,13 +85,24 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
 }
 /// YOUR JOB: Implement linkat.
 pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
+    /*
+    说明：
+为了方便，不考虑新文件路径已经存在的情况（属于未定义行为）。除非出现新旧名字一致的情况，此时需要返回-1。 */
+    //获取基础文件数据 文件名字
     let token = current_user_token();
-    let _old_path = translated_str(token, _old_name);
-    let _new_path = translated_str(token, _old_name);
-    match file_hard_link(&_old_path,&_new_path){
-        Ok(ret)=>{ret as isize},
-        _=>{-1}
+    let owner_file = translated_str(token, _old_name);
+    let linker_file = translated_str(token, _new_name);
+    if linker_file.eq(&owner_file) {
+        return -1;
     }
+
+    //调用接口
+    if link_file(&owner_file, &linker_file).is_some(){
+        0
+    }else {
+        -1
+    }
+    
 }
 
 /// YOUR JOB: Implement unlinkat.
@@ -100,5 +111,12 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
         "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let file_name = translated_str(token, _name);
+    
+    if unlink_file(&file_name).is_some() {
+        0
+    } else {
+        -1
+    }
 }
